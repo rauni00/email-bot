@@ -8,6 +8,7 @@ import * as nodemailer from "nodemailer";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import fs from "fs";
+import path from "path";
 
 // Multer setup for uploads
 const upload = multer({
@@ -28,6 +29,17 @@ export async function registerRoutes(
 
   async function processEmailQueue() {
     if (isProcessing) return;
+
+    // Indian Standard Time is UTC + 5:30
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const hours = istTime.getUTCHours();
+
+    // Check if within working hours (9 AM to 9 PM IST)
+    if (hours < 9 || hours >= 21) {
+      console.log(`[Engine] Outside working hours (9AM-9PM IST). Current IST hour: ${hours}`);
+      return;
+    }
 
     const settings = await storage.getSettings();
     if (!settings.isActive) return;
@@ -55,12 +67,26 @@ export async function registerRoutes(
 
       try {
         console.log(`[Engine] Sending email to ${contact.email}`);
-        await transporter.sendMail({
+        const mailOptions: any = {
           from: settings.smtpUser || "",
           to: contact.email,
           subject: settings.emailSubject || "No Subject",
           html: settings.emailBody || "",
-        });
+        };
+
+        if (settings.resumeFilename) {
+          const filePath = path.join(process.cwd(), "uploads", settings.resumeFilename);
+          if (fs.existsSync(filePath)) {
+            mailOptions.attachments = [
+              {
+                filename: "Resume.pdf",
+                path: filePath,
+              },
+            ];
+          }
+        }
+
+        await transporter.sendMail(mailOptions);
         await storage.updateContactStatus(contact.id, "sent");
         console.log(`[Engine] Success: ${contact.email}`);
       } catch (err: any) {
@@ -115,7 +141,7 @@ export async function registerRoutes(
   app.patch("/api/contacts/:id/status", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id; // Removed parseInt for MongoDB ObjectId
       const { status } = z
         .object({ status: z.enum(["pending", "sent", "failed", "skipped"]) })
         .parse(req.body);
@@ -129,21 +155,30 @@ export async function registerRoutes(
   // Manual Create
   app.post(api.contacts.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
-    try {
-      const input = api.contacts.create.input.parse(req.body);
-      const existing = await storage.getContactByEmail(input.email);
+      try {
+        const input = api.contacts.create.input.parse(req.body);
+        const existing = await storage.getContactByEmail(input.email.toLowerCase());
 
-      if (existing && existing.status === "sent") {
-        return res
-          .status(400)
-          .json({ message: "Contact already sent an email." });
+        if (existing) {
+          if (existing.status === "sent") {
+            return res.status(400).json({ message: "Contact already sent an email." });
+          }
+          if (existing.status === "failed") {
+            // Update to pending to allow retry
+            const updated = await storage.updateContactStatus(existing.id, "pending");
+            return res.json(updated);
+          }
+          return res.status(400).json({ message: "Contact already exists in queue." });
+        }
+
+        const contact = await storage.createContact({
+          ...input,
+          email: input.email.toLowerCase(),
+        });
+        res.status(201).json(contact);
+      } catch (err) {
+        res.status(400).json({ message: "Invalid input" });
       }
-
-      const contact = await storage.createContact(input);
-      res.status(201).json(contact);
-    } catch (err) {
-      res.status(400).json({ message: "Invalid input" });
-    }
   });
 
   // Upload CSV
@@ -167,20 +202,26 @@ export async function registerRoutes(
         let duplicates = 0;
 
         for (const record of records as any[]) {
-          const email = record.email || record.Email;
+          const email = (record.email || record.Email || "").toLowerCase().trim();
           const name = record.name || record.Name || "HR Contact";
 
           if (!email) continue;
 
-          const existing = await storage.getContactByEmail(email.toLowerCase());
+          const existing = await storage.getContactByEmail(email);
           if (existing) {
-            duplicates++;
+            if (existing.status === "failed") {
+              // Reset failed contact to pending
+              await storage.updateContactStatus(existing.id, "pending");
+              processed++;
+            } else {
+              duplicates++;
+            }
             continue;
           }
 
           await storage.createContact({
             name,
-            email: email.toLowerCase(),
+            email,
             source: `csv:${req.file.originalname}`,
           });
 
@@ -206,6 +247,64 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
     const stats = await storage.getStats();
     res.json(stats);
+  });
+
+  // Quick Send
+  app.post("/api/contacts/quick-send", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    
+    try {
+      const { name, email } = z.object({
+        name: z.string(),
+        email: z.string().email(),
+      }).parse(req.body);
+
+      const settings = await storage.getSettings();
+      
+      // 1. Create/Update Contact
+      let contact = await storage.getContactByEmail(email.toLowerCase());
+      if (contact) {
+        if (contact.status === "sent") {
+          return res.status(400).json({ message: "You have already sent an email to this contact." });
+        }
+        await storage.updateContactStatus(contact.id, "pending");
+      } else {
+        contact = await storage.createContact({
+          name,
+          email: email.toLowerCase(),
+          source: "quick-send",
+        });
+      }
+
+      // 2. Send Email Immediately
+      const transporter = createTransporter(settings);
+      const mailOptions: any = {
+        from: settings.smtpUser || "",
+        to: email,
+        subject: settings.emailSubject || "Job Application",
+        html: settings.emailBody || "",
+      };
+
+      if (settings.resumeFilename) {
+        const filePath = path.join(process.cwd(), "uploads", settings.resumeFilename);
+        if (fs.existsSync(filePath)) {
+          mailOptions.attachments = [
+            {
+              filename: "Resume.pdf",
+              path: filePath,
+            },
+          ];
+        }
+      }
+
+      await transporter.sendMail(mailOptions);
+      await storage.updateContactStatus(contact.id, "sent");
+
+      res.json({ message: "Email sent successfully" });
+    } catch (err: any) {
+      console.error("[QuickSend] Error:", err);
+      res.status(400).json({ message: err.message || "Failed to send email" });
+    }
   });
 
   // Settings GET
@@ -239,6 +338,19 @@ export async function registerRoutes(
       });
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Resume Upload
+  app.post("/api/settings/resume", upload.single("file"), async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    try {
+      await storage.updateSettings({ resumeFilename: req.file.filename });
+      res.json({ filename: req.file.filename });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save resume" });
     }
   });
 

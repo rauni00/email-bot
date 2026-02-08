@@ -11,6 +11,7 @@ export function Sidebar() {
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+    { icon: Send, label: "Quick Send", href: "/quick-send" },
     { icon: Users, label: "Contacts", href: "/contacts" },
     { icon: Upload, label: "Import", href: "/upload" },
     { icon: Settings, label: "Settings", href: "/settings" },

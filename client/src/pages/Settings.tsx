@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Mail, Server, Clock, ShieldCheck, Send } from "lucide-react";
+import { Save, Mail, Server, Clock, ShieldCheck, Send, FileUp } from "lucide-react";
 
 // Extend schema for form validation
 const formSchema = insertSettingsSchema;
@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const { mutate: sendTest, isPending: isSendingTest } = useTestEmail();
   const { toast } = useToast();
   const [testEmail, setTestEmail] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -76,6 +77,33 @@ export default function SettingsPage() {
         toast({ title: "Test Failed", description: err.message, variant: "destructive" });
       }
     });
+  };
+
+  const onResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      toast({ title: "Invalid file", description: "Please upload a PDF file.", variant: "destructive" });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setIsUploading(true);
+    try {
+      const res = await fetch("/api/settings/resume", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      toast({ title: "Resume Uploaded", description: "Your resume has been updated successfully." });
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (isLoading) return <div className="p-8">Loading settings...</div>;
@@ -169,13 +197,57 @@ export default function SettingsPage() {
               <Input {...form.register("emailSubject")} placeholder="Job Application - [Your Name]" />
             </div>
             <div className="space-y-2">
-              <Label>Email Body</Label>
+              <Label>Email Body (HTML Supported)</Label>
               <Textarea 
                 {...form.register("emailBody")} 
-                className="min-h-[200px] font-mono text-sm" 
-                placeholder="Dear Hiring Manager..." 
+                className="min-h-[300px] font-mono text-sm" 
+                placeholder="<html><body><h1>Hello</h1></body></html>" 
               />
-              <p className="text-xs text-muted-foreground">Plain text only. HTML is not supported yet.</p>
+              <p className="text-xs text-muted-foreground">You can enter plain text or HTML formatting.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AUTOMATION SETTINGS */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                <FileUp className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle>Resume Attachment</CardTitle>
+                <CardDescription>Upload a PDF resume to attach to outgoing emails.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => document.getElementById("resume-upload")?.click()}
+                  disabled={isUploading}
+                >
+                  <FileUp className="w-4 h-4 mr-2" />
+                  {isUploading ? "Uploading..." : "Upload PDF Resume"}
+                </Button>
+                <input 
+                  id="resume-upload" 
+                  type="file" 
+                  accept=".pdf" 
+                  className="hidden" 
+                  onChange={onResumeUpload} 
+                />
+                {settings?.resumeFilename && (
+                  <span className="text-sm text-green-600 flex items-center gap-1">
+                    <ShieldCheck className="w-4 h-4" />
+                    Resume uploaded
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">This PDF will be attached to every outreach email sent by the engine.</p>
             </div>
           </CardContent>
         </Card>

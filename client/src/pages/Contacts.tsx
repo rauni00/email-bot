@@ -32,7 +32,7 @@ export default function Contacts() {
   const { mutate: updateStatus } = useUpdateContactStatus();
   const { mutate: createContact, isPending: isCreating } = useCreateContact();
 
-  const handleStatusChange = (id: number, newStatus: string) => {
+  const handleStatusChange = (id: string, newStatus: string) => {
     updateStatus({ id, status: newStatus }, {
       onSuccess: () => toast({ title: "Status Updated" }),
       onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" })

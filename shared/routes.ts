@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertContactSchema, insertSettingsSchema, contacts, settings } from './schema';
+import { insertContactSchema, insertSettingsSchema, type Contact, type Settings } from './schema';
 
 export const api = {
   contacts: {
@@ -14,7 +14,7 @@ export const api = {
       }).optional(),
       responses: {
         200: z.object({
-          contacts: z.array(z.custom<typeof contacts.$inferSelect>()),
+          contacts: z.array(z.custom<Contact>()),
           total: z.number(),
           pages: z.number(),
         }),
@@ -27,7 +27,7 @@ export const api = {
         status: z.enum(['pending', 'sent', 'failed', 'skipped']),
       }),
       responses: {
-        200: z.custom<typeof contacts.$inferSelect>(),
+        200: z.custom<Contact>(),
         404: z.object({ message: z.string() }),
       },
     },
@@ -36,7 +36,7 @@ export const api = {
       path: '/api/contacts',
       input: insertContactSchema,
       responses: {
-        201: z.custom<typeof contacts.$inferSelect>(),
+        201: z.custom<Contact>(),
         400: z.object({ message: z.string() }),
       },
     },
@@ -71,7 +71,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/settings',
       responses: {
-        200: z.custom<typeof settings.$inferSelect>(),
+        200: z.custom<Settings>(),
       },
     },
     update: {
@@ -79,7 +79,7 @@ export const api = {
       path: '/api/settings',
       input: insertSettingsSchema.partial(),
       responses: {
-        200: z.custom<typeof settings.$inferSelect>(),
+        200: z.custom<Settings>(),
       },
     },
     toggle: {

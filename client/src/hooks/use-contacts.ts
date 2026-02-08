@@ -28,7 +28,7 @@ export function useContacts(filters?: { status?: string; search?: string; page?:
 export function useUpdateContactStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const res = await fetch(`/api/contacts/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
