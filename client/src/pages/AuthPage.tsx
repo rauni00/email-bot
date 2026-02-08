@@ -59,7 +59,7 @@ export default function AuthPage() {
                 id="email"
                 type="email"
                 {...form.register("email")}
-                placeholder="rahulrauniyar700@gmail.com"
+                placeholder="abc@gmail.com"
               />
               {form.formState.errors.email && (
                 <p className="text-sm text-destructive">
@@ -80,11 +80,7 @@ export default function AuthPage() {
                 </p>
               )}
             </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoggingIn}
-            >
+            <Button type="submit" className="w-full" disabled={isLoggingIn}>
               {isLoggingIn ? "Logging in..." : "Login"}
             </Button>
           </form>

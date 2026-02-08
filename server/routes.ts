@@ -22,7 +22,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Setup Auth
   await setupAuth(app);
-  registerAuthRoutes(app);
+  // registerAuthRoutes(app);
 
   // Email Engine background process
   let isProcessing = false;
@@ -32,12 +32,14 @@ export async function registerRoutes(
 
     // Indian Standard Time is UTC + 5:30
     const now = new Date();
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
     const hours = istTime.getUTCHours();
 
     // Check if within working hours (9 AM to 9 PM IST)
     if (hours < 9 || hours >= 21) {
-      console.log(`[Engine] Outside working hours (9AM-9PM IST). Current IST hour: ${hours}`);
+      console.log(
+        `[Engine] Outside working hours (9AM-9PM IST). Current IST hour: ${hours}`,
+      );
       return;
     }
 
@@ -75,11 +77,15 @@ export async function registerRoutes(
         };
 
         if (settings.resumeFilename) {
-          const filePath = path.join(process.cwd(), "uploads", settings.resumeFilename);
+          const filePath = path.join(
+            process.cwd(),
+            "uploads",
+            settings.resumeFilename,
+          );
           if (fs.existsSync(filePath)) {
             mailOptions.attachments = [
               {
-                filename: "Resume.pdf",
+                filename: "RAHUL_RAUNIYAR.pdf",
                 path: filePath,
               },
             ];
@@ -155,30 +161,39 @@ export async function registerRoutes(
   // Manual Create
   app.post(api.contacts.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
-      try {
-        const input = api.contacts.create.input.parse(req.body);
-        const existing = await storage.getContactByEmail(input.email.toLowerCase());
+    try {
+      const input = api.contacts.create.input.parse(req.body);
+      const existing = await storage.getContactByEmail(
+        input.email.toLowerCase(),
+      );
 
-        if (existing) {
-          if (existing.status === "sent") {
-            return res.status(400).json({ message: "Contact already sent an email." });
-          }
-          if (existing.status === "failed") {
-            // Update to pending to allow retry
-            const updated = await storage.updateContactStatus(existing.id, "pending");
-            return res.json(updated);
-          }
-          return res.status(400).json({ message: "Contact already exists in queue." });
+      if (existing) {
+        if (existing.status === "sent") {
+          return res
+            .status(400)
+            .json({ message: "Contact already sent an email." });
         }
-
-        const contact = await storage.createContact({
-          ...input,
-          email: input.email.toLowerCase(),
-        });
-        res.status(201).json(contact);
-      } catch (err) {
-        res.status(400).json({ message: "Invalid input" });
+        if (existing.status === "failed") {
+          // Update to pending to allow retry
+          const updated = await storage.updateContactStatus(
+            existing.id,
+            "pending",
+          );
+          return res.json(updated);
+        }
+        return res
+          .status(400)
+          .json({ message: "Contact already exists in queue." });
       }
+
+      const contact = await storage.createContact({
+        ...input,
+        email: input.email.toLowerCase(),
+      });
+      res.status(201).json(contact);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
   });
 
   // Upload CSV
@@ -202,7 +217,9 @@ export async function registerRoutes(
         let duplicates = 0;
 
         for (const record of records as any[]) {
-          const email = (record.email || record.Email || "").toLowerCase().trim();
+          const email = (record.email || record.Email || "")
+            .toLowerCase()
+            .trim();
           const name = record.name || record.Name || "HR Contact";
 
           if (!email) continue;
@@ -252,20 +269,24 @@ export async function registerRoutes(
   // Quick Send
   app.post("/api/contacts/quick-send", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
-    
+
     try {
-      const { name, email } = z.object({
-        name: z.string(),
-        email: z.string().email(),
-      }).parse(req.body);
+      const { name, email } = z
+        .object({
+          name: z.string(),
+          email: z.string().email(),
+        })
+        .parse(req.body);
 
       const settings = await storage.getSettings();
-      
+
       // 1. Create/Update Contact
       let contact = await storage.getContactByEmail(email.toLowerCase());
       if (contact) {
         if (contact.status === "sent") {
-          return res.status(400).json({ message: "You have already sent an email to this contact." });
+          return res.status(400).json({
+            message: "You have already sent an email to this contact.",
+          });
         }
         await storage.updateContactStatus(contact.id, "pending");
       } else {
@@ -286,11 +307,15 @@ export async function registerRoutes(
       };
 
       if (settings.resumeFilename) {
-        const filePath = path.join(process.cwd(), "uploads", settings.resumeFilename);
+        const filePath = path.join(
+          process.cwd(),
+          "uploads",
+          settings.resumeFilename,
+        );
         if (fs.existsSync(filePath)) {
           mailOptions.attachments = [
             {
-              filename: "Resume.pdf",
+              filename: "RAHUL_RAUNIYAR.pdf",
               path: filePath,
             },
           ];

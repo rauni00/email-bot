@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Settings, Upload, LogOut, Activity } from "lucide-react";
+import { LayoutDashboard, Users, Settings, Upload, LogOut, Activity, Send } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { cn } from "@/lib/utils";

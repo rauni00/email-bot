@@ -5,19 +5,22 @@ import type { Express, RequestHandler } from "express";
 import MongoStore from "connect-mongo";
 import { User } from "../../models";
 import { authStorage } from "./storage";
+import dotenv from "dotenv";
+dotenv.config();
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  
+
   if (!process.env.MONGODB_URI) {
-      console.warn("No MONGODB_URI for session store");
+    console.warn("No MONGODB_URI for session store");
   }
 
   return session({
     secret: process.env.SESSION_SECRET || "local-secret",
     store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI || "mongodb://localhost:27017/email-bot",
-        ttl: sessionTtl / 1000, // seconds
+      mongoUrl:
+        process.env.MONGODB_URI || "mongodb://localhost:27017/email-bot",
+      ttl: sessionTtl / 1000, // seconds
     }),
     resave: false,
     saveUninitialized: false,
@@ -48,8 +51,8 @@ export async function setupAuth(app: Express) {
         } catch (err) {
           return done(err);
         }
-      }
-    )
+      },
+    ),
   );
 
   passport.serializeUser((user: any, cb) => cb(null, user.id));
@@ -81,8 +84,19 @@ export async function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    res.json(req.user);
+  app.post("/api/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) {
+        return res
+          .status(401)
+          .json({ message: info?.message || "Invalid email or password" });
+      }
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.json(user);
+      });
+    })(req, res, next);
   });
 
   app.post("/api/logout", (req, res, next) => {
